@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Action DS - Pixel Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DotGothic16&display=swap');
+        
+        :root {
+            --ds-shell: #34495e;
+            --ds-screen-bg: #000;
+            --pixel-font: 'DotGothic16', sans-serif;
+        }
+
+        body {
+            font-family: var(--pixel-font);
+            background: #1a1a1a;
+            color: #fff;
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .ds-body {
+            width: 95vw;
+            max-width: 420px;
+            height: 90vh;
+            background: var(--ds-shell);
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 0 0 4px #2c3e50, 0 20px 60px rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+        }
+
+        .ds-hinge {
+            height: 20px;
+            background: #2c3e50;
+            margin: -2px 0;
+            border-radius: 2px;
+            flex-shrink: 0;
+            border-top: 2px solid #1a252f;
+            border-bottom: 2px solid #46637f;
+        }
+
+        .screen {
+            flex: 1;
+            background: var(--ds-screen-bg);
+            border: 4px solid #111;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            image-rendering: pixelated;
+        }
+
+        .screen::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 255, 0, 0.03));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .visual-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #mainVisual {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            opacity: 0;
+            transition: opacity 0.3s steps(4);
+            image-rendering: pixelated;
+        }
+        #mainVisual.loaded { opacity: 1; }
+
+        .status-header {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+            background: #111; padding: 8px; border: 2px solid #333; margin-bottom: 8px;
+        }
+
+        .bar-bg { height: 10px; background: #222; margin-top: 4px; border: 1px solid #444; overflow: hidden; }
+        .bar-fill { height: 100%; transition: width 0.2s steps(5); }
+
+        .log-area {
+            background: #000; border: 2px solid #333;
+            padding: 10px; overflow-y: auto; margin-bottom: 8px; flex-grow: 1;
+            font-size: 0.9rem; line-height: 1.6;
+            color: #0f0;
+            text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+        }
+
+        .controls { display: flex; flex-direction: column; gap: 6px; }
+
+        input {
+            width: 100%; background: #111; border: 2px solid #444;
+            color: #fff; padding: 10px; font-family: var(--pixel-font);
+            font-size: 0.9rem; outline: none;
+        }
+        input:focus { border-color: #0f0; }
+
+        .btn-ds {
+            padding: 12px; font-weight: bold; text-align: center;
+            cursor: pointer; font-size: 1rem; border: 2px solid rgba(255,255,255,0.2);
+            font-family: var(--pixel-font);
+            box-shadow: 4px 4px 0 rgba(0,0,0,0.5); transition: all 0.05s;
+            user-select: none;
+            text-transform: uppercase;
+        }
+        .btn-ds:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(0,0,0,0.5); }
+        .btn-blue { background: #0044cc; color: white; }
+        .btn-green { background: #008800; color: white; }
+        .btn-red { background: #aa0000; color: white; }
+        .btn-ds:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .event-banner {
+            position: absolute; top: 10px; right: 10px;
+            background: #f00; color: white; padding: 2px 8px; font-size: 0.8rem;
+            font-weight: bold; border: 2px solid #fff; z-index: 20; animation: flash 0.4s steps(2) infinite;
+        }
+
+        .end-screen {
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            position: absolute; inset: 0; background: rgba(0,0,0,0.95); z-index: 50; text-align: center; padding: 24px;
+        }
+
+        @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes shake { 0%, 100% { transform: translate(0,0); } 25% { transform: translate(-4px, 2px); } 75% { transform: translate(4px, -2px); } }
+        .shake { animation: shake 0.1s steps(2) 4; }
+
+        .log-area::-webkit-scrollbar { width: 6px; }
+        .log-area::-webkit-scrollbar-track { background: #111; }
+        .log-area::-webkit-scrollbar-thumb { background: #444; }
+
+        .pixel-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #0f0;
+            border-top-color: transparent;
+            animation: spin 0.8s steps(8) infinite;
+        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .guide-box {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+            z-index: 25;
+        }
+    </style>
+</head>
+<body>
+
+<div class="ds-body" id="dsDevice">
+    <div class="screen" id="topScreen">
+        <div id="loadingTop" class="absolute inset-0 bg-black hidden items-center justify-center z-30 flex-col gap-3">
+            <div class="pixel-spinner"></div>
+            <div id="loadingStatus" class="text-[12px] text-green-500 font-bold tracking-widest uppercase">Rendering Visual...</div>
+        </div>
+        
+        <div id="guidePanel" class="guide-box">
+            <div class="text-blue-400 text-lg mb-4 border-b-2 border-blue-900 pb-2 w-full">--- 操作ガイド ---</div>
+            <ul class="text-left text-xs space-y-3 text-gray-300">
+                <li>1. 下画面に物語のテーマを入力してください</li>
+                <li>2. [BOOT SYSTEM] で冒険を開始します</li>
+                <li>3. 危機は計3回。短時間で決着がつきます</li>
+                <li>4. [CONTINUE] でイベント発生、[ACTION] で対処</li>
+                <li>5. すべての危機を乗り越え、結末を見届けろ！</li>
+            </ul>
+            <div class="mt-6 text-[10px] text-blue-500 animate-pulse">テーマを決めて開始してください...</div>
+        </div>
+
+        <div class="visual-container">
+            <div id="eventTag" class="hidden event-banner">WARNING</div>
+            <img id="mainVisual" src="https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=400" alt="Main Scene">
+            <div id="topText" class="absolute bottom-0 left-0 right-0 bg-black/80 border-t-2 border-green-900 p-3 text-[11px] text-green-400 z-10 leading-relaxed min-h-[50px]">
+                SYSTEM READY...
+            </div>
+        </div>
+    </div>
+
+    <div class="ds-hinge"></div>
+
+    <div class="screen" id="bottomScreen" style="padding: 12px; background: #050505;">
+        <div class="status-header" id="statusHeader">
+            <div>
+                <div class="flex justify-between text-[10px] font-bold text-red-500 tracking-tighter">
+                    <span id="labelStat1">VITAL</span>
+                    <span id="valStat1">100</span>
+                </div>
+                <div class="bar-bg"><div id="barStat1" class="bar-fill bg-red-600" style="width:100%"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between text-[10px] font-bold text-blue-500 tracking-tighter">
+                    <span id="labelStat2">ENERGY</span>
+                    <span id="valStat2">50</span>
+                </div>
+                <div class="bar-bg"><div id="barStat2" class="bar-fill bg-blue-600" style="width:50%"></div></div>
+            </div>
+        </div>
+
+        <div id="logBox" class="log-area">
+            [BOOT SUCCESS]<br>物語のテーマを入力してください。
+        </div>
+
+        <div class="controls" id="mainControls">
+            <div id="setupUI">
+                <input type="text" id="summonInput" placeholder="ENTER WORLD..." value="サイバーパンクな世界での逃亡劇">
+                <button id="startBtn" class="btn-ds btn-blue w-full mt-2">BOOT SYSTEM</button>
+            </div>
+            
+            <div id="gameUI" class="hidden flex flex-col gap-2">
+                <div id="commandUI" class="hidden flex flex-col gap-2">
+                    <input type="text" id="actionInput" placeholder="INPUT ACTION...">
+                    <button id="actionBtn" class="btn-ds btn-blue w-full">EXECUTE</button>
+                </div>
+                <div id="advanceWrapper">
+                    <button id="advanceBtn" class="btn-ds btn-green w-full">CONTINUE</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="endingUI" class="end-screen">
+            <h2 class="text-2xl font-bold text-yellow-500 mb-2 tracking-widest">EPILOGUE</h2>
+            <div id="endingText" class="text-sm text-gray-300 mb-6 overflow-y-auto max-h-48 px-2 leading-relaxed"></div>
+            <button onclick="location.reload()" class="btn-ds btn-green px-10">REBOOT</button>
+        </div>
+
+        <div id="gameOverUI" class="end-screen">
+            <h2 class="text-3xl font-bold text-red-600 mb-2 tracking-tighter">GAME OVER</h2>
+            <div id="gameOverText" class="text-sm text-red-200 mb-6 px-2"></div>
+            <button onclick="location.reload()" class="btn-ds btn-red px-10">RETRY</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    const apiKey = "AIzaSyCdyueAL5WJlZxjBG-VeyYxlL12MnUyyX4"; // Runtime-provided
+    const MODEL_TEXT = "gemini-2.5-flash-preview-09-2025";
+    const MODEL_IMAGE = "gemini-2.5-flash-image-preview";
+
+    const mainVisual = document.getElementById('mainVisual');
+    const logBox = document.getElementById('logBox');
+    const topText = document.getElementById('topText');
+    const loadingTop = document.getElementById('loadingTop');
+    const loadingStatus = document.getElementById('loadingStatus');
+    const guidePanel = document.getElementById('guidePanel');
+    const setupUI = document.getElementById('setupUI');
+    const gameUI = document.getElementById('gameUI');
+    const commandUI = document.getElementById('commandUI');
+    const advanceBtn = document.getElementById('advanceBtn');
+    const actionBtn = document.getElementById('actionBtn');
+    
+    const BGM_NORMAL = "https://raw.githubusercontent.com/hw26a070/materials/main/maou_bgm_8bit22.mp3";
+    const BGM_DANGER = "https://raw.githubusercontent.com/hw26a070/materials/main/maou_bgm_8bit25.mp3";
+    const BGM_ENDING = "https://raw.githubusercontent.com/hw26a070/materials/main/maou_bgm_8bit29.mp3";
+    const BGM_GAMEOVER = "https://raw.githubusercontent.com/hw26a070/materials/main/maou_bgm_8bit20.mp3";
+    const SE_BUTTON_SRC = "https://raw.githubusercontent.com/hw26a070/materials/main/maou_se_8bit16.mp3";
+    const seButton = new Audio(SE_BUTTON_SRC);
+    seButton.volume = 0.4;
+
+    let currentAudio = null;
+    let stat1 = 100, stat2 = 50;
+    let charName = "", worldSetting = "";
+    let turnCount = 0;
+    const MAX_TURNS = 3; 
+
+    function playBgm(url) {
+        if (currentAudio) {
+            if (currentAudio.src === url) return;
+            currentAudio.pause();
+        }
+        currentAudio = new Audio(url);
+        currentAudio.loop = true;
+        currentAudio.volume = 0.2;
+        currentAudio.play().catch(() => {});
+    }
+
+    function playSeInstant() {
+        seButton.currentTime = 0;
+        seButton.play().catch(() => {});
+    }
+
+    async function fetchWithRetry(url, options, maxRetries = 5) {
+        const delays = [1000, 2000, 4000, 8000, 16000];
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(url, options);
+                if (response.ok) return response;
+                const text = await response.text();
+                // If it's a 404 or 400 with specific error, we might need to handle it
+                console.warn(`Attempt ${i+1} failed: ${response.status}`);
+            } catch (err) {
+                console.error(`Attempt ${i+1} Network Error:`, err);
+            }
+            if (i < maxRetries - 1) await new Promise(r => setTimeout(r, delays[i]));
+        }
+        throw new Error("Final connection attempt failed.");
+    }
+
+    async function callAI(system, prompt) {
+        loadingTop.style.display = 'flex';
+        loadingStatus.innerText = "Processing Logic...";
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_TEXT}:generateContent?key=${apiKey}`;
+            const response = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: system }] },
+                    generationConfig: { 
+                        responseMimeType: "application/json",
+                        temperature: 0.8
+                    }
+                })
+            });
+            const data = await response.json();
+            const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!textContent) throw new Error("Empty AI response");
+            return JSON.parse(textContent);
+        } catch (e) {
+            addLog("<span class='text-red-500'>[ERROR] Logic sync failed. Check connection.</span>");
+            throw e;
+        } finally {
+            loadingTop.style.display = 'none';
+        }
+    }
+
+    async function updateVisual(promptText) {
+        loadingTop.style.display = 'flex';
+        loadingStatus.innerText = "Rendering Visual...";
+        try {
+            const pixelPrompt = `Pixel art for a game. World: "${worldSetting}". Scene: ${promptText}. 16-bit retro, low res.`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_IMAGE}:generateContent?key=${apiKey}`;
+            
+            const response = await fetchWithRetry(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: pixelPrompt }] }],
+                    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+                })
+            });
+            
+            const result = await response.json();
+            const base64 = result.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+            
+            if (base64) {
+                mainVisual.classList.remove('loaded');
+                mainVisual.src = `data:image/png;base64,${base64}`;
+                mainVisual.onload = () => {
+                    mainVisual.classList.add('loaded');
+                    loadingTop.style.display = 'none';
+                };
+            } else {
+                throw new Error("Image data missing");
+            }
+        } catch (e) {
+            loadingTop.style.display = 'none';
+            mainVisual.src = `https://via.placeholder.com/400x300/000000/00FF00?text=SIGNAL+LOST`;
+            mainVisual.classList.add('loaded');
+            addLog("<span class='text-gray-500'>[NOTICE] Visual sync failed.</span>");
+        }
+    }
+
+    function addLog(msg) {
+        const div = document.createElement('div');
+        div.className = "mb-2 border-l-2 border-green-900 pl-2";
+        div.innerHTML = msg;
+        logBox.appendChild(div);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function updateBars(shake = false) {
+        document.getElementById('valStat1').innerText = Math.round(stat1);
+        document.getElementById('barStat1').style.width = stat1 + "%";
+        document.getElementById('valStat2').innerText = Math.round(stat2);
+        document.getElementById('barStat2').style.width = stat2 + "%";
+        if (shake) {
+            document.getElementById('dsDevice').classList.add('shake');
+            setTimeout(() => document.getElementById('dsDevice').classList.remove('shake'), 400);
+        }
+    }
+
+    document.getElementById('startBtn').onclick = async () => {
+        playSeInstant();
+        worldSetting = document.getElementById('summonInput').value;
+        if (!worldSetting) return;
+        
+        document.getElementById('startBtn').disabled = true;
+        guidePanel.classList.add('hidden');
+        addLog(`[SYSTEM] Initializing world...`);
+        playBgm(BGM_NORMAL);
+
+        try {
+            const res = await callAI(
+                `あなたはゲームマスターです。世界設定に忠実に。形式: {"name": "主人公名", "scene": "場所名", "startMsg": "開始メッセージ", "s1Label": "HP呼称", "s2Label": "MP呼称", "imgPrompt": "描写"}`,
+                `世界設定: ${worldSetting}.`
+            );
+
+            charName = res.name;
+            document.getElementById('labelStat1').innerText = res.s1Label;
+            document.getElementById('labelStat2').innerText = res.s2Label;
+            topText.innerText = `LOCATION: ${res.scene}`;
+            
+            await updateVisual(res.imgPrompt);
+            
+            setupUI.classList.add('hidden');
+            gameUI.classList.remove('hidden');
+            addLog(`<span class='text-blue-500'>[LOGIN: ${charName}]</span>`);
+            addLog(res.startMsg);
+        } catch (e) {
+            document.getElementById('startBtn').disabled = false;
+            guidePanel.classList.remove('hidden');
+        }
+    };
+
+    advanceBtn.onclick = async () => {
+        playSeInstant();
+        advanceBtn.disabled = true;
+        playBgm(BGM_DANGER);
+        
+        try {
+            const res = await callAI(
+                `危機的状況を演出せよ。形式: {"event": "危機の短い説明", "imgPrompt": "ドット絵描写"}`,
+                `世界設定: ${worldSetting}, 第${turnCount + 1}/${MAX_TURNS}の試練。`
+            );
+
+            topText.innerText = `EVENT: ${res.event}`;
+            document.getElementById('eventTag').classList.remove('hidden');
+            addLog(`<span class='text-red-500 font-bold'>[!] ${res.event}</span>`);
+            await updateVisual(res.imgPrompt);
+            
+            advanceBtn.classList.add('hidden');
+            commandUI.classList.remove('hidden');
+        } catch (e) {
+        } finally {
+            advanceBtn.disabled = false;
+        }
+    };
+
+    actionBtn.onclick = async () => {
+        playSeInstant();
+        const action = document.getElementById('actionInput').value;
+        if (!action) return;
+        
+        actionBtn.disabled = true;
+        turnCount++;
+        addLog(`<span class='text-blue-400'>> ${action}</span>`);
+        document.getElementById('actionInput').value = "";
+
+        try {
+            const res = await callAI(
+                `判定マスター。形式: {"success": true/false, "msg": "結果", "s1Delta": 数値, "s2Delta": 数値, "imgPrompt": "描写"}`,
+                `状況: ${topText.innerText}, 行動: ${action}.`
+            );
+
+            stat1 = Math.max(0, Math.min(100, stat1 + res.s1Delta));
+            stat2 = Math.max(0, Math.min(100, stat2 + res.s2Delta));
+            updateBars(res.s1Delta < 0);
+            
+            addLog(res.msg);
+            topText.innerText = res.msg;
+            await updateVisual(res.imgPrompt);
+
+            if (stat1 <= 0) {
+                gameOver(res.msg);
+                return;
+            }
+
+            if (res.success) {
+                playBgm(BGM_NORMAL);
+                document.getElementById('eventTag').classList.add('hidden');
+                commandUI.classList.add('hidden');
+                if (turnCount >= MAX_TURNS) finishGame();
+                else advanceBtn.classList.remove('hidden');
+            } else {
+                addLog("<span class='text-yellow-500'>[NOTICE] さらなる対応が必要だ。</span>");
+            }
+        } catch (e) {
+        } finally {
+            actionBtn.disabled = false;
+        }
+    };
+
+    async function gameOver(msg) {
+        playBgm(BGM_GAMEOVER);
+        document.getElementById('gameOverUI').style.display = 'flex';
+        document.getElementById('gameOverText').innerText = msg;
+        topText.innerText = "OFFLINE";
+        await updateVisual(`glitch distorted end scene`);
+    }
+
+    async function finishGame() {
+        playBgm(BGM_ENDING);
+        addLog("[SYSTEM] Mission Complete.");
+        try {
+            const res = await callAI(
+                `結末を描写せよ。形式: {"epilogue": "物語の結末", "imgPrompt": "ending scene"}`,
+                `最終状況: ${topText.innerText}`
+            );
+            document.getElementById('endingUI').style.display = 'flex';
+            document.getElementById('endingText').innerText = res.epilogue;
+            topText.innerText = "COMPLETE";
+            await updateVisual(res.imgPrompt);
+        } catch (e) {}
+    }
+
+    document.body.addEventListener('click', () => {
+        if (currentAudio && currentAudio.paused) currentAudio.play();
+    }, { once: true });
+</script>
+
+</body>
+</html>
